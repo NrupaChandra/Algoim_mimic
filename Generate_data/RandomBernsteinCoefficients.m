@@ -5,9 +5,9 @@ apply_monotone_filter = true;
 monotone_mode = 'both+';
 monotone_tol  = 1e-9;
 time = false;
-export = true;
+export = false;
 k = 1;
-N = 100;
+N = 10000;
 filebase = '10kTestBernstein_';
 
 T = BaseTransformers2D;
