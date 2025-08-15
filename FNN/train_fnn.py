@@ -5,7 +5,7 @@ import time
 import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
-from multidataloader_fnn import MultiChunkDataset  # Your dataset class
+from multidataloader_fnn import MultiChunkDataset 
 from model_fnn import load_ff_pipelines_model, save_checkpoint, load_checkpoint
 import os
 import numpy as np
@@ -15,62 +15,27 @@ import matplotlib.pyplot as plt
 torch.set_default_dtype(torch.float32)
 
 # Device setup
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"\nUsing device: {device}, GPU Name: {torch.cuda.get_device_name(0)}")
+device = torch.device('cpu')
+'''device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+print(f"\nUsing device: {device}, GPU Name: {torch.cuda.get_device_name(0)}")'''
 
 # Define paths for data and saving model/checkpoints.
 data_dir = r"C:\Git\Algoim_mimic\Pre_processing"
 model_dir = r"C:\Git\Algoim_mimic\FNN\Model"
 os.makedirs(model_dir, exist_ok=True)
 
-#########################
-# Custom Collate Function
-#########################
-def custom_collate_fn(batch):
-    exp_x = torch.stack([item[0].float() for item in batch])
-    exp_y = torch.stack([item[1].float() for item in batch])
-    coeff = torch.stack([item[2].float() for item in batch])
-    nodes_x = [item[3].float() for item in batch]
-    nodes_y = [item[4].float() for item in batch]
-    weights = [item[5].float() for item in batch]
-    max_len = max(x.size(0) for x in nodes_x)
-    padded_nodes_x = torch.stack([
-        torch.cat([x, torch.zeros(max_len - x.size(0), dtype=torch.float32)])
-        for x in nodes_x
-    ])
-    padded_nodes_y = torch.stack([
-        torch.cat([y, torch.zeros(max_len - y.size(0), dtype=torch.float32)])
-        for y in nodes_y
-    ])
-    padded_weights = torch.stack([
-        torch.cat([w, torch.zeros(max_len - w.size(0), dtype=torch.float32)])
-        for w in weights
-    ])
-    masks = torch.stack([
-        torch.cat([torch.ones(x.size(0), dtype=torch.float32),
-                   torch.zeros(max_len - x.size(0), dtype=torch.float32)])
-        for x in nodes_x
-    ])
-    return exp_x, exp_y, coeff, padded_nodes_x, padded_nodes_y, padded_weights, masks
 
-#########################
-#  Nearest Neighbor Loss
-#########################
-def nearest_neighbor_alignment_loss(pred_x, pred_y, true_x, true_y):
-    """
-    Aligns predicted nodes to true nodes in (x,y) space.
-    For each predicted node, find the nearest true node and
-    penalize squared distance.
-    """
-    pred = torch.stack([pred_x, pred_y], dim=2)   # (B, N_pred, 2)
-    true = torch.stack([true_x, true_y], dim=2)   # (B, N_true, 2)
-    dists = torch.cdist(pred, true, p=2) ** 2
-    min_dists, _ = torch.min(dists, dim=2)
-    return torch.mean(min_dists)
+#  Loss function
 
-#########################
+def loss_function(pred_x, pred_y, true_x, true_y):
+    dx = pred_x - true_x       
+    dy = pred_y - true_y
+    dist = dx.pow(2) + dy.pow(2)  
+    return torch.sqrt(dist + 1e-12).mean()
+        
+
 # Training Function
-#########################
+
 def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, checkpoint_path=None, save_every=5):
     if checkpoint_path is None:
         checkpoint_path = os.path.join(model_dir, "fnn_checkpoint.pth")
@@ -94,7 +59,7 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, c
     
     for epoch in range(start_epoch, epochs):
         epoch_start_time = time.time()
-        torch.cuda.empty_cache()
+        #torch.cuda.empty_cache()
         epoch_list.append(epoch + 1)
 
         # ---- Training ----
@@ -107,7 +72,7 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, c
             optimizer.zero_grad()
             pred_nodes_x, pred_nodes_y, pred_weights = model(exp_x, exp_y, coeff)
 
-            loss = nearest_neighbor_alignment_loss(pred_nodes_x, pred_nodes_y, true_nodes_x, true_nodes_y)
+            loss = loss_function(pred_nodes_x, pred_nodes_y, true_nodes_x, true_nodes_y)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
@@ -125,7 +90,7 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, c
                     x.to(device) for x in (exp_x, exp_y, coeff, true_nodes_x, true_nodes_y)
                 )
                 pred_nodes_x, pred_nodes_y, pred_weights = model(exp_x, exp_y, coeff)
-                loss = nearest_neighbor_alignment_loss(pred_nodes_x, pred_nodes_y, true_nodes_x, true_nodes_y)
+                loss = loss_function(pred_nodes_x, pred_nodes_y, true_nodes_x, true_nodes_y)
                 val_loss += loss.item()
         val_loss /= len(val_dataloader)
         val_losses.append(val_loss)
@@ -144,14 +109,16 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, c
     
     return epoch_list, train_losses, val_losses, epoch_times
 
-#########################
-# Main Training Execution
-#########################
+
+# Main function
+
 if __name__ == "__main__":
     seed = 6432
     torch.manual_seed(seed)
     random.seed(seed)
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    num_workers = 0
+    pin_memory = False
+    #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     dataset = MultiChunkDataset(
         index_file=os.path.join(data_dir, r'preprocessed_chuncks_10kMonotonic_functions\index.txt'),
@@ -171,19 +138,15 @@ if __name__ == "__main__":
         train_dataset,
         batch_size=256,
         shuffle=True,
-        collate_fn=custom_collate_fn,
-        num_workers=4,
-        prefetch_factor=4,
-        pin_memory=True
+        num_workers=num_workers,
+        pin_memory=pin_memory
     )
     val_dataloader = DataLoader(
         val_dataset,
         batch_size=256,
         shuffle=False,
-        collate_fn=custom_collate_fn,
-        num_workers=4,
-        prefetch_factor=4,
-        pin_memory=True
+        num_workers=num_workers,
+        pin_memory=pin_memory
     )
     
     model = load_ff_pipelines_model()

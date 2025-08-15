@@ -18,8 +18,8 @@ device = torch.device('cpu')
 torch.set_default_dtype(torch.float32)
 
 # Define directories for model and test results.
-model_dir = r"C:\Git\MasterThesis\Models\FNN\FNN_model_v6"
-results_dir = r"C:\Git\RESULTS\Fnn"
+model_dir = r"C:\Git\Algoim_mimic\FNN\Model"
+results_dir = r"C:\Git\Algoim_mimic\FNN\Results"
 os.makedirs(results_dir, exist_ok=True)
 
 # Redirect all print() output (and errors) to a log file
@@ -36,9 +36,9 @@ def test_fn(x, y):
     return 1
 
 # Data loading
-data_dir = r"C:\Git\Data"
+data_dir = r"C:\Git\Algoim_mimic\Pre_processing"
 dataset = MultiChunkDataset(
-    index_file=os.path.join(data_dir, 'combined_preprocessed_chunks_TestBernstein/index.txt'),
+    index_file=os.path.join(data_dir, 'preprocessed_chuncks_1kMonotonic_functions/index.txt'),
     base_dir=data_dir
 )
 dataloader = DataLoader(dataset, batch_size=1, shuffle=False)

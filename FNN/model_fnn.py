@@ -48,7 +48,6 @@ class FeedForwardNN(nn.Module):
         self.nodal_preprocessor = NodalPreprocessor(num_nodes=num_nodes, domain=domain)
         input_dim = num_nodes
 
-        # Build shared layers dynamically based on num_shared_layers.
         shared_layers = []
         in_dim = input_dim
         for _ in range(num_shared_layers):
@@ -59,43 +58,43 @@ class FeedForwardNN(nn.Module):
             in_dim = hidden_dim
         self.shared_layer = nn.Sequential(*shared_layers)
         
-        # Branch for predicting node positions in x.
+        # Predict node positions only
         self.x_layer = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, max_output_len),
             nn.Tanh()
         )
-        
-        # Branch for predicting node positions in y.
         self.y_layer = nn.Sequential(
             nn.Linear(hidden_dim, hidden_dim),
             nn.ReLU(),
             nn.Linear(hidden_dim, max_output_len),
             nn.Tanh()
         )
-        
-        # Branch for predicting weights.
-        self.w_layer = nn.Sequential(
-            nn.Linear(hidden_dim, output_dim),
-            nn.ReLU(),
-            nn.Linear(output_dim, max_output_len),
-            nn.Softplus()
-        )
-  
-    def forward(self, exp_x, exp_y, coeff):
-        # Obtain the nodal representation.
-        x = self.nodal_preprocessor(exp_x, exp_y, coeff)
-        
-        # Pass through the shared layers.
-        shared_features_nodes = self.shared_layer(x)
-        shared_features_weights = self.shared_layer(x)
 
-        # Process through individual branches.
-        pred_nodes_x = self.x_layer(shared_features_nodes)
-        pred_nodes_y = self.y_layer(shared_features_nodes)
-        pred_weights = self.w_layer(shared_features_weights)
-        
+        fixed_w = torch.tensor([
+            [0.13153953, 0.13153953, 0.11377631, 0.11377631, 0.08065399, 0.08065399, 0.03671395, 0.03671395],
+            [0.13153953, 0.13153953, 0.11377631, 0.11377631, 0.08065399, 0.08065399, 0.03671395, 0.03671395],
+            [0.11377631, 0.11377631, 0.09841186, 0.09841186, 0.06976241, 0.06976241, 0.03175606, 0.03175606],
+            [0.11377631, 0.11377631, 0.09841186, 0.09841186, 0.06976241, 0.06976241, 0.03175606, 0.03175606],
+            [0.08065399, 0.08065399, 0.06976241, 0.06976241, 0.04945332, 0.04945332, 0.02251131, 0.02251131],
+            [0.08065399, 0.08065399, 0.06976241, 0.06976241, 0.04945332, 0.04945332, 0.02251131, 0.02251131],
+            [0.03671395, 0.03671395, 0.03175606, 0.03175606, 0.02251131, 0.02251131, 0.01024722, 0.01024722],
+            [0.03671395, 0.03671395, 0.03175606, 0.03175606, 0.02251131, 0.02251131, 0.01024722, 0.01024722]
+        ], dtype=torch.float32).flatten()
+        self.register_buffer("fixed_weights", fixed_w)
+
+    def forward(self, exp_x, exp_y, coeff):
+        x = self.nodal_preprocessor(exp_x, exp_y, coeff)
+        shared_features = self.shared_layer(x)
+
+        pred_nodes_x = self.x_layer(shared_features)
+        pred_nodes_y = self.y_layer(shared_features)
+
+        # Broadcast fixed weights for batch
+        batch_size = exp_x.shape[0]
+        pred_weights = self.fixed_weights.unsqueeze(0).repeat(batch_size, 1)
+
         return pred_nodes_x, pred_nodes_y, pred_weights
 
 def load_ff_pipelines_model(weights_path=None,
