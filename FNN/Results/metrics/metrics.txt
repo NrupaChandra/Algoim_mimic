@@ -1,16 +1,16 @@
-Overall MAE: 2.5569e+00
-Overall MSE: 7.2798e+00
-Mean Relative Error: 1710.74%
-Median Relative Error: 164.47%
-Identified 11 outlier samples (relative error > 1009.96%):
-Sample b82cb4a2b13b42c5d4a9a76d868c5d30: Relative Error = 1103.54%
-Sample a17c9d2e4ea7cce7a03918940cb72d87: Relative Error = 3496.84%
-Sample 1917fa1202fd8f18b45641f183544c2f: Relative Error = 2353.13%
-Sample 9e71237cdf2f4382f6a710dd85355af3: Relative Error = 5056.52%
-Sample f5f6edafb4b092756eb6acc36ead3b95: Relative Error = 1873.18%
-Sample b37cb180d2e68189e6fbde47a6798268: Relative Error = 21289.74%
-Sample 4515cd68e1685a674cb064a9c0db25be: Relative Error = 2279.81%
-Sample 731f86245b060eb2f33a6d1ab288df7c: Relative Error = 1345.11%
-Sample 3eb646bd268db4de11afd95bf548ecaa: Relative Error = 13943.52%
-Sample 02eb47b05052e2c3d4daca8647b7d68e: Relative Error = 64259.10%
-Sample cbdec2d80700aca54a81954e6b6c0d78: Relative Error = 1653.53%
+Overall MAE: 3.2929e-02
+Overall MSE: 2.1332e-03
+Mean Relative Error: 26.68%
+Median Relative Error: 1.58%
+Identified 11 outlier samples (relative error > 8.58%):
+Sample 7ab7046e3fa23fd4161c3d644e6640d6: Relative Error = 12.56%
+Sample b82cb4a2b13b42c5d4a9a76d868c5d30: Relative Error = 11.34%
+Sample a17c9d2e4ea7cce7a03918940cb72d87: Relative Error = 44.05%
+Sample 1917fa1202fd8f18b45641f183544c2f: Relative Error = 13.93%
+Sample 9e71237cdf2f4382f6a710dd85355af3: Relative Error = 68.32%
+Sample f5f6edafb4b092756eb6acc36ead3b95: Relative Error = 35.61%
+Sample b37cb180d2e68189e6fbde47a6798268: Relative Error = 401.44%
+Sample 731f86245b060eb2f33a6d1ab288df7c: Relative Error = 15.48%
+Sample 3eb646bd268db4de11afd95bf548ecaa: Relative Error = 280.46%
+Sample 02eb47b05052e2c3d4daca8647b7d68e: Relative Error = 1057.39%
+Sample cbdec2d80700aca54a81954e6b6c0d78: Relative Error = 16.38%

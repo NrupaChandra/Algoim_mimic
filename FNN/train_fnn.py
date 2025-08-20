@@ -10,6 +10,7 @@ from model_fnn import load_ff_pipelines_model, save_checkpoint, load_checkpoint
 import os
 import numpy as np
 import matplotlib.pyplot as plt
+import torch.nn.functional as F
 
 # Set default dtype to single precision.
 torch.set_default_dtype(torch.float32)
@@ -25,18 +26,53 @@ model_dir = r"C:\Git\Algoim_mimic\FNN\Model"
 os.makedirs(model_dir, exist_ok=True)
 
 
-#  Loss function
+#  Loss 
 
-def loss_function(pred_x, pred_y, true_x, true_y):
-    dx = pred_x - true_x       
-    dy = pred_y - true_y
-    dist = dx.pow(2) + dy.pow(2)  
-    return torch.sqrt(dist + 1e-12).mean()
-        
+def legendre_poly(n, x):
+    if n == 0:
+        return torch.ones_like(x)
+    elif n == 1:
+        return x
+    else:
+        P_nm2 = torch.ones_like(x)
+        P_nm1 = x
+        for k in range(1, n):
+            P_n = ((2 * k + 1) * x * P_nm1 - k * P_nm2) / (k + 1)
+            P_nm2, P_nm1 = P_nm1, P_n
+        return P_n
+
+def test_functions():
+    funcs = []
+    for i in range(3):
+        for j in range(3):
+            funcs.append(lambda x, y, i=i, j=j: legendre_poly(i, x) * legendre_poly(j, y))
+    return funcs
+
+def loss_function(exp_x, exp_y, coeff, pred_nodes_x, pred_nodes_y, pred_weights, 
+                                 true_nodes_x, true_nodes_y, true_weights, masks, 
+                                 criterion, test_functions):
+    integration_loss = 0
+    dx = pred_nodes_x - true_nodes_x       
+    dy = pred_nodes_y - true_nodes_y
+    dist = dx.pow(2) + dy.pow(2)
+    node_loss = torch.sqrt(dist + 1e-12).mean()  
+
+    w_diff = pred_weights - true_weights       
+    w_err = w_diff.pow(2)                 
+    weight_loss = torch.sqrt(w_err +1e-12).mean()
+    
+
+    for test_fn in test_functions():
+        pred_integral = torch.sum(pred_weights * test_fn(pred_nodes_x, pred_nodes_y), dim=1)
+        true_integral = torch.sum(true_weights * test_fn(true_nodes_x, true_nodes_y), dim=1)
+        integration_loss += criterion(pred_integral, true_integral)
+    integration_loss /= len(test_functions())
+    total_loss =  weight_loss + node_loss
+    return total_loss
 
 # Training Function
 
-def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, checkpoint_path=None, save_every=5):
+def train_fnn(model, train_dataloader, val_dataloader, optimizer, criterion, test_functions, epochs=1000, checkpoint_path=None, save_every=5):
     if checkpoint_path is None:
         checkpoint_path = os.path.join(model_dir, "fnn_checkpoint.pth")
     model.to(device)
@@ -62,7 +98,7 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, c
         #torch.cuda.empty_cache()
         epoch_list.append(epoch + 1)
 
-        # ---- Training ----
+        # Training
         model.train()
         train_loss = 0
         for exp_x, exp_y, coeff, true_nodes_x, true_nodes_y, true_weights, masks in train_dataloader:
@@ -72,7 +108,8 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, c
             optimizer.zero_grad()
             pred_nodes_x, pred_nodes_y, pred_weights = model(exp_x, exp_y, coeff)
 
-            loss = loss_function(pred_nodes_x, pred_nodes_y, true_nodes_x, true_nodes_y)
+            loss = loss_function(exp_x, exp_y, coeff, pred_nodes_x, pred_nodes_y, pred_weights, true_nodes_x, true_nodes_y, true_weights, masks, 
+                                 criterion, test_functions)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
@@ -81,7 +118,7 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, c
         train_loss /= len(train_dataloader)
         train_losses.append(train_loss)
         
-        # ---- Validation ----
+        # Validation 
         model.eval()
         val_loss = 0
         with torch.no_grad():
@@ -90,7 +127,8 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, c
                     x.to(device) for x in (exp_x, exp_y, coeff, true_nodes_x, true_nodes_y)
                 )
                 pred_nodes_x, pred_nodes_y, pred_weights = model(exp_x, exp_y, coeff)
-                loss = loss_function(pred_nodes_x, pred_nodes_y, true_nodes_x, true_nodes_y)
+                loss = loss_function(exp_x, exp_y, coeff, pred_nodes_x, pred_nodes_y, pred_weights, true_nodes_x, true_nodes_y, true_weights, masks, 
+                                 criterion, test_functions)
                 val_loss += loss.item()
         val_loss /= len(val_dataloader)
         val_losses.append(val_loss)
@@ -152,12 +190,13 @@ if __name__ == "__main__":
     model = load_ff_pipelines_model()
     model.to(device)
     
+    criterion = nn.MSELoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1.0e-05)
     
     epochs = 1000
     epoch_list, train_losses, val_losses, epoch_times = train_fnn(
         model, train_dataloader, val_dataloader,
-        optimizer, epochs=epochs, checkpoint_path=os.path.join(model_dir, "fnn_checkpoint.pth"), save_every=5
+        optimizer,criterion, test_functions, epochs=epochs, checkpoint_path=os.path.join(model_dir, "fnn_checkpoint.pth"), save_every=5
     )
     
     plt.figure(figsize=(10,5))

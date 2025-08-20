@@ -1,0 +1,1 @@
+number;id;exp_x;exp_y;coeff
