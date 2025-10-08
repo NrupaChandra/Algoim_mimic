@@ -1,7 +1,9 @@
 import numpy as np
 
 
-file_path = r"C:\Git\Algoim_mimic\FNN\Results\predicted_data_fnn.txt"
+#file_path = r"C:\Git\Algoim_mimic\FNN\Results\predicted_data_fnn.txt"
+test_path = r"C:\Git\Algoim_mimic\Weight_scalling\test_scalling.txt"
+
 
 weightRefs = np.array([0.1012285362903763 ,0.2223810344533745 ,0.3137066458778873 ,0.3626837833783620 ,0.3626837833783620 ,0.3137066458778873 ,0.2223810344533745, 0.1012285362903763])
 deltaRef = 0.9602898564975363*2 #always same since it comes from fixed quadrature 
@@ -45,7 +47,7 @@ def read_predicted_data(path):
     return ids, nodes_x_all, nodes_y_all
 
 
-ids, nodes_x_all, nodes_y_all = read_predicted_data(file_path)
+ids, nodes_x_all, nodes_y_all = read_predicted_data(test_path)
 
 xdeltas = np.stack([nx[:, 7] - nx[:, 0] for nx in nodes_x_all])
 ydeltas = np.stack([ny[7, :] - ny[0, :] for ny in nodes_y_all])
@@ -53,10 +55,11 @@ ydeltas = np.stack([ny[7, :] - ny[0, :] for ny in nodes_y_all])
 xscales = xdeltas/deltaRef
 yscales = ydeltas/deltaRef
 
-'''print("xvals for the first node set are ", nodes_x_all[0])
+#print("xvals for the first node set are ", nodes_x_all[0])
+print (xscales.shape)
 print("x deltas for the first node set are", xdeltas[0])
 print("x scales for the first node set are", xscales[0])
- '''
+ 
 
 scaled_weights_all = []
 
@@ -65,15 +68,15 @@ for k in range(len(ids)):
     scaled_weights_all.append(scaled)
 
 
-'''
+
 print(scaled_weights_all[0].shape)   
 print("Scaled weights for first node set:\n", scaled_weights_all[0])
 
 s = np.sum(scaled_weights_all[0])
-print("sum of the first set is :", s)'''
+print("sum of the first set is :", s)
 
 
-output_file = r"C:\Git\Algoim_mimic\Weight_scalling\Weight_scalling.txt"
+output_file = r"C:\Git\Algoim_mimic\Weight_scalling\Weight_scalling_test.txt"
 
 with open(output_file, "w") as f:
     f.write("number;id;nodes_x;nodes_y;weights\n\n")

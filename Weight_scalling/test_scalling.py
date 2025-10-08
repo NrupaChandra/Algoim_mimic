@@ -1,199 +1,165 @@
-#!/usr/bin/env python
-import os
-import re
-import csv
 import numpy as np
-import matplotlib.pyplot as plt
-import torch
-from torch.utils.data import DataLoader
-
-# --- your imports ---
 from multidataloader_fnn import MultiChunkDataset
+import os
+from torch.utils.data import DataLoader
+import torch
 import utilities
+import matplotlib.pyplot as plt
 
-# =========================
-# Config
-# =========================
 device = torch.device('cpu')
-torch.set_default_dtype(torch.float32)
 
-results_dir = r"C:\Git\Algoim_mimic\Weight_scalling"
-data_dir    = r"C:\Git\Algoim_mimic\Pre_processing"
-pred_file   = os.path.join(results_dir, "Weight_scalling.txt")
+# Data loading
 
-# Folders
-plots_dir   = os.path.join(results_dir, "plots")
-metrics_dir = os.path.join(results_dir, "metrics")
-os.makedirs(plots_dir, exist_ok=True)
-os.makedirs(metrics_dir, exist_ok=True)
+data_dir = r"C:\Git\Algoim_mimic\Pre_processing"
+pre_txt  = r"C:\Git\Algoim_mimic\Weight_scalling\Weight_scalling.txt"
 
-# =========================
-# Prediction file parser
-# =========================
-ARR_RE = re.compile(r"\[(.*?)\]")
+results_dir = r"C:\Git\Algoim_mimic\Weight_scalling\Results"
+os.makedirs(results_dir, exist_ok=True)
 
-def _parse_array(line: str) -> np.ndarray:
-    m = ARR_RE.search(line)
-    return np.fromstring(m.group(1).strip(), sep=" ", dtype=np.float32) if m else np.array([], dtype=np.float32)
+output_folder = results_dir
+output_file   = os.path.join(output_folder, "predicted_data_fnn.txt")
+with open(output_file, 'w') as f:
+    f.write("number;id;nodes_x;nodes_y;weights\n")
 
-def load_predictions(path: str):
-    """Parses a file with blocks:
-       id: <string>
-       nodes_x: [x1 x2 ...]
-       nodes_y: [y1 y2 ...]
-       weights: [w1 w2 ...]
-    """
-    pred_by_id = {}
+def test_fn(x, y):
+    return 1
+
+# ------------------------------------------------------
+# Simple parser for predictions text file
+# ------------------------------------------------------
+def load_predictions(path):
+    preds = {}
+    cur_id = None
+    cur_x = cur_y = cur_w = None
     with open(path, "r", encoding="utf-8") as f:
-        cur_id = None
-        cur_x = cur_y = cur_w = None
-        for raw in f:
-            line = raw.strip()
+        for line in f:
+            line = line.strip()
             if not line:
                 continue
-            if line.startswith("id:"):
-                # commit previous block
+            if line.startswith("number:"):
+                # commit previous
                 if cur_id is not None and cur_x is not None and cur_y is not None and cur_w is not None:
-                    pred_by_id[cur_id] = (cur_x, cur_y, cur_w)
-                # start new
+                    preds[cur_id] = (cur_x, cur_y, cur_w)
+                cur_id = None; cur_x = cur_y = cur_w = None
+            elif line.startswith("id:"):
                 cur_id = line.split("id:")[1].strip()
-                cur_x = cur_y = cur_w = None
             elif line.startswith("nodes_x:"):
-                cur_x = _parse_array(line)
+                txt = line.split("nodes_x:")[1].strip().strip("[]")
+                cur_x = np.fromstring(txt, sep=" ", dtype=np.float32)
             elif line.startswith("nodes_y:"):
-                cur_y = _parse_array(line)
+                txt = line.split("nodes_y:")[1].strip().strip("[]")
+                cur_y = np.fromstring(txt, sep=" ", dtype=np.float32)
             elif line.startswith("weights:"):
-                cur_w = _parse_array(line)
-
+                txt = line.split("weights:")[1].strip().strip("[]")
+                cur_w = np.fromstring(txt, sep=" ", dtype=np.float32)
         # commit last
         if cur_id is not None and cur_x is not None and cur_y is not None and cur_w is not None:
-            pred_by_id[cur_id] = (cur_x, cur_y, cur_w)
+            preds[cur_id] = (cur_x, cur_y, cur_w)
+    return preds
 
-    return pred_by_id
+pred_by_id = load_predictions(pre_txt)
 
-pred_by_id = load_predictions(pred_file)
-print(f"Loaded predictions for {len(pred_by_id)} ids from '{pred_file}'")
-
-# =========================
-# Dataset & Loader
-# =========================
+# ------------------------------------------------------
+# Dataset
+# ------------------------------------------------------
 dataset = MultiChunkDataset(
     index_file=os.path.join(data_dir, 'preprocessed_chuncks_10kMonotonic_functions/index.txt'),
     base_dir=data_dir
 )
 dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
 
-# =========================
-# Integration test function
-# =========================
-def test_fn(x, y):
-    # constant integrand: integral equals sum of weights over the domain
-    return 1.0
-
-# =========================
-# Metrics accumulators
-# =========================
-total_abs_diff = 0.0
-total_sq_diff  = 0.0
-total_ids      = 0
+# ------------------------------------------------------
+# Error tracking
+# ------------------------------------------------------
+total_absolute_difference = 0.0
+total_squared_difference = 0.0
+total_ids = 0
+predicted_integrals = []
+true_integrals = []
 relative_errors = []
-per_sample_rows = []  # [id, true_int, pred_int, abs_diff, rel_err_pct]
-
-# =========================
-# Main: compare + plot + save
-# =========================
-saved = 0
-skipped = 0
+rel_error_info = []
+number = 1
 
 with torch.no_grad():
     for sample in dataloader:
-        exp_x, exp_y, coeff, true_x, true_y, true_w, id_t = sample
-        sid = id_t[0].decode("utf-8") if isinstance(id_t[0], bytes) else str(id_t[0])
+        exp_x, exp_y, coeff, true_values_x, true_values_y, true_values_w, id = sample
 
-        if sid not in pred_by_id:
-            skipped += 1
-            print(f"[skip] no predictions for id={sid}")
+        exp_x, exp_y, coeff = (exp_x.to(device, dtype=torch.float32),
+                               exp_y.to(device, dtype=torch.float32),
+                               coeff.to(device, dtype=torch.float32))
+
+        true_nodes_x = true_values_x.numpy().astype(np.float32)
+        true_nodes_y = true_values_y.numpy().astype(np.float32)
+        true_weights = true_values_w.numpy().astype(np.float32)
+
+        # === NEW: load predicted nodes from file instead of model ===
+        id_str = id[0] if isinstance(id, (list,tuple)) else str(id)
+        if id_str not in pred_by_id:
+            print(f"[WARN] no prediction for id {id_str}, skipping")
             continue
+        px, py, pw = pred_by_id[id_str]  # these are NumPy arrays
+        predicted_nodes_x = px.astype(np.float32).ravel()
+        predicted_nodes_y = py.astype(np.float32).ravel()
+        predicted_weights = pw.astype(np.float32).ravel()
 
-        # Ground-truth integral
-        true_val = utilities.compute_integration(true_x, true_y, true_w, test_fn)[0].item()
+        pnx_t = torch.from_numpy(predicted_nodes_x).to(device=device, dtype=torch.float32).unsqueeze(0)  # [1, N]
+        pny_t = torch.from_numpy(predicted_nodes_y).to(device=device, dtype=torch.float32).unsqueeze(0)  # [1, N]
+        pw_t  = torch.from_numpy(predicted_weights).to(device=device, dtype=torch.float32).unsqueeze(0)  # [1, N]
 
-        # Predicted arrays (np → torch) and reshape to match true shapes
-        px_np, py_np, pw_np = pred_by_id[sid]
-        px_t = torch.from_numpy(px_np.reshape(true_x.shape)).to(torch.float32)
-        py_t = torch.from_numpy(py_np.reshape(true_y.shape)).to(torch.float32)
-        pw_t = torch.from_numpy(pw_np.reshape(true_w.shape)).to(torch.float32)
+        # Integrals
+        pred_val = utilities.compute_integration(pnx_t, pny_t, pw_t ,test_fn)[0].item()
+        true_val = utilities.compute_integration(true_values_x, true_values_y, true_values_w, test_fn)[0].item()
 
-        # Predicted integral
-        pred_val = utilities.compute_integration(px_t, py_t, pw_t, test_fn)[0].item()
+        predicted_integrals.append(pred_val)
+        true_integrals.append(true_val)
 
-        # Metrics
-        abs_diff = abs(pred_val - true_val)
-        sq_diff  = (pred_val - true_val) ** 2
-        rel_err  = abs_diff / abs(true_val) if abs(true_val) > 1e-10 else 0.0
+        absolute_difference = abs(pred_val - true_val)
+        squared_difference  = (pred_val - true_val) ** 2
+        total_absolute_difference += absolute_difference
+        total_squared_difference  += squared_difference
+        total_ids += 1
 
-        total_abs_diff += abs_diff
-        total_sq_diff  += sq_diff
-        total_ids      += 1
-        relative_errors.append(rel_err)
+        rel_error = absolute_difference / abs(true_val) if abs(true_val) > 1e-10 else 0.0
+        relative_errors.append(rel_error)
+        rel_error_info.append((id_str, rel_error))
 
-        per_sample_rows.append([sid, f"{true_val:.10e}", f"{pred_val:.10e}", f"{abs_diff:.10e}", f"{rel_err*100:.6f}"])
+        print(f"Result of integration for {id_str}:")
+        print(f"Algoim (True):  {true_val:.4e}")
+        print(f"From file (Pred): {pred_val:.4e}")
+        print(f"Absolute Difference: {absolute_difference:.4e}")
+        print(f"Relative Error: {rel_error*100:.2f}%")
 
-        # Plot (overlay true vs predicted)
-        gx = true_x.numpy().flatten()
-        gy = true_y.numpy().flatten()
-        gw = true_w.numpy().flatten()
-        px = px_np.flatten()
-        py = py_np.flatten()
-        pw = pw_np.flatten()
-
-        plt.figure(figsize=(6, 6))
-        sc_true = plt.scatter(gx, gy, c=gw, cmap='viridis', marker='x', label='True (Algoim)', alpha=0.9)
-        sc_pred = plt.scatter(px, py, c=pw, cmap='plasma', marker='o', label='Predicted', alpha=0.75)
-        cbar = plt.colorbar(sc_pred)
-        cbar.set_label('Weight')
-
+        # Plot
+        plt.figure(figsize=(10, 6))
+        grid = np.linspace(-1, 1, 400)
+        XX, YY = np.meshgrid(grid, grid)
+        ZZ = np.zeros_like(XX)
+        for ex, ey, c in zip(exp_x.cpu().numpy().reshape(-1),
+                             exp_y.cpu().numpy().reshape(-1),
+                             coeff.cpu().numpy().reshape(-1)):
+            ZZ += c * (XX**ex) * (YY**ey)
+        plt.contour(XX, YY, ZZ, levels=[0], colors='k', linewidths=1.5)
+        plt.scatter(true_nodes_x, true_nodes_y, c=true_weights, cmap='viridis',
+                    label='Reference Points (Algoim)', alpha=0.6, marker='x')
+        plt.scatter(predicted_nodes_x, predicted_nodes_y, c=predicted_weights, cmap='plasma',
+                    label='Predicted Points', alpha=0.6)
+        plt.title('Reference (Algoim) vs Predicted Nodes')
+        plt.xlabel('X-coordinate')
+        plt.ylabel('Y-coordinate')
+        plt.colorbar(label='Weight (Coefficient)')
         plt.legend()
-        plt.title(f"True vs Predicted Nodes — id {sid}")
-        plt.xlabel('x'); plt.ylabel('y')
-        plt.xlim(-1, 1); plt.ylim(-1, 1)
-        plt.grid(True, linewidth=0.3, alpha=0.4)
-
-        # Annotation: true/pred integrals + rel err
-        txt = f"True ∫: {true_val:.8f}\nPred ∫: {pred_val:.8f}\nRelErr: {rel_err*100:.2f}%"
-        plt.text(0.02, 0.98, txt, transform=plt.gca().transAxes,
-                 va='top', ha='left', fontsize=10,
-                 bbox=dict(facecolor='white', edgecolor='none', alpha=0.7))
-
-        outpath = os.path.join(plots_dir, f"{sid}.png")
-        plt.savefig(outpath, dpi=200, bbox_inches='tight')
+        plt.xlim(-1, 1)
+        plt.ylim(-1, 1)
+        plt.text(0.05, 0.95, f"True Int (Algoim): {true_val:.8f}\nPred Int : {pred_val:.8f}",
+                 transform=plt.gca().transAxes, fontsize=10, verticalalignment='top',
+                 bbox=dict(facecolor='white', alpha=0.5))
+        sample_plot_path = os.path.join(output_folder, f'{id_str}.png')
+        plt.savefig(sample_plot_path)
         plt.close()
 
-        saved += 1
-        print(f"[saved] {outpath}")
+        with open(output_file, 'a') as f:
+            f.write(f"{number};{id_str};{','.join(map(str, predicted_nodes_x))};"
+                    f"{','.join(map(str, predicted_nodes_y))};"
+                    f"{','.join(map(str, predicted_weights))}\n")
 
-# =========================
-# Write metrics
-# =========================
-overall_MAE = total_abs_diff / total_ids if total_ids > 0 else 0.0
-overall_MSE = total_sq_diff  / total_ids if total_ids > 0 else 0.0
-mean_rel_err_pct   = (np.mean(relative_errors) * 100) if total_ids > 0 else 0.0
-median_rel_err_pct = (np.median(relative_errors) * 100) if total_ids > 0 else 0.0
-
-# metrics.txt
-with open(os.path.join(metrics_dir, "metrics.txt"), "w", encoding="utf-8") as mf:
-    mf.write(f"Total samples compared: {total_ids}\n")
-    mf.write(f"Overall MAE: {overall_MAE:.6e}\n")
-    mf.write(f"Overall MSE: {overall_MSE:.6e}\n")
-    mf.write(f"Mean Relative Error: {mean_rel_err_pct:.4f}%\n")
-    mf.write(f"Median Relative Error: {median_rel_err_pct:.4f}%\n")
-
-# per-sample CSV (easy to sort/filter later)
-with open(os.path.join(metrics_dir, "per_sample.csv"), "w", newline="", encoding="utf-8") as cf:
-    writer = csv.writer(cf)
-    writer.writerow(["id", "true_integral", "pred_integral", "abs_diff", "rel_err_percent"])
-    writer.writerows(per_sample_rows)
-
-print(f"\nDone.\nSaved {saved} plots to: {plots_dir}\nSkipped {skipped} samples without predictions.")
-print(f"Metrics written to: {os.path.join(metrics_dir, 'metrics.txt')}")
-print(f"Per-sample CSV:     {os.path.join(metrics_dir, 'per_sample.csv')}")
+        number += 1
