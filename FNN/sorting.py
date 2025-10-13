@@ -1,13 +1,14 @@
-# sorting_rows.py — strict raster order (rows by y, left→right by x), no numpy/regex
+# sort_rows_or_transpose.py — keep row-major; transpose if column-major (no numpy/regex)
 
 INPUT_FILE  = r"C:\Git\Algoim_mimic\FNN\Results\predicted_data_fnn.txt"
 OUTPUT_FILE = r"C:\Git\Algoim_mimic\Weight_scalling\predicted_data_fnn_sorted.txt"
 
-PER_LINE     = 8       # number of nodes per row (8x8 grid => 8)
-STRICT_GRID  = True    # if True, require n % PER_LINE == 0 else skip record
+PER_LINE     = 8        # number of nodes per row (columns)
+STRICT_GRID  = True     # require n % PER_LINE == 0 else skip record
+
+# ---------- helpers ----------
 
 def parse_arr(text):
-    """Parse a bracketed, whitespace-separated array into list[float]."""
     s = text.strip()
     if s.startswith("[") and s.endswith("]"):
         s = s[1:-1]
@@ -15,20 +16,15 @@ def parse_arr(text):
     return [float(p) for p in parts]
 
 def fmt_block(vals, fmt, per_line=PER_LINE):
-    """Format values in a bracketed, multi-line block with per_line numbers."""
     out = ["["]
     for i in range(0, len(vals), per_line):
         chunk = vals[i:i+per_line]
-        line = " " + "  ".join(fmt % v for v in chunk)
-        out.append(line)
+        out.append(" " + "  ".join(fmt % v for v in chunk))
     out.append("]")
     return "\n".join(out)
 
 def cut_one_record(buf):
-    """
-    Cut exactly one 'number;id;xs;ys;ws' record from buffer.
-    Looks for four semicolons and the closing ']' of the final array.
-    """
+    # Cut exactly one 'number;id;xs;ys;ws' record from buffer.
     pos = []
     start = 0
     for _ in range(4):
@@ -42,14 +38,95 @@ def cut_one_record(buf):
         return None, buf
     return buf[:end_w + 1], buf[end_w + 1:]
 
+def _largest_gaps_partition(sorted_idx, values, k_groups):
+    """
+    Indices 'sorted_idx' must already be sorted by 'values' ascending.
+    Split into k_groups by cutting at the (k_groups-1) largest consecutive gaps in 'values'.
+    """
+    n = len(sorted_idx)
+    if k_groups <= 0 or n < k_groups:
+        return None
+    gaps = []
+    for i in range(n - 1):
+        a = sorted_idx[i]; b = sorted_idx[i + 1]
+        gaps.append((abs(values[b] - values[a]), i))
+    gaps.sort(reverse=True, key=lambda t: t[0])
+    cuts = sorted([pos for (_, pos) in gaps[:k_groups - 1]])
+    groups = []
+    start = 0
+    for pos in cuts:
+        groups.append(sorted_idx[start:pos + 1])
+        start = pos + 1
+    groups.append(sorted_idx[start:])
+    return groups
+
+def _row_groups_tightness(x, y, per_line):
+    """
+    Row-based grouping by y into n_rows bands; return (tightness, groups).
+    Tightness is mean absolute deviation in y within bands (lower is tighter).
+    """
+    n = len(x)
+    n_rows = n // per_line
+    idx = list(range(n))
+    idx.sort(key=lambda i: (y[i], x[i]))  # y asc, tie-break x
+    bands = _largest_gaps_partition(idx, y, n_rows)
+    if bands is None:
+        return 1e30, None
+    # average absolute deviation within each band
+    dev = 0.0
+    for b in bands:
+        m = len(b)
+        if m == 0:
+            return 1e30, None
+        mu = sum(y[i] for i in b) / m
+        dev += sum(abs(y[i] - mu) for i in b) / m
+    dev /= len(bands)
+    return dev, bands
+
+def _col_groups_tightness(x, y, per_line):
+    """
+    Column-based grouping by x into PER_LINE stacks; return (tightness, groups).
+    Tightness is mean absolute deviation in x within stacks (lower is tighter).
+    """
+    n = len(x)
+    idx = list(range(n))
+    idx.sort(key=lambda i: (x[i], y[i]))  # x asc, tie-break y
+    stacks = _largest_gaps_partition(idx, x, per_line)
+    if stacks is None:
+        return 1e30, None
+    dev = 0.0
+    for s in stacks:
+        m = len(s)
+        if m == 0:
+            return 1e30, None
+        mu = sum(x[i] for i in s) / m
+        dev += sum(abs(x[i] - mu) for i in s) / m
+    dev /= len(stacks)
+    return dev, stacks
+
+def _transpose_order(n_rows, n_cols):
+    """
+    Return permutation 'p' for transposing an n_rows x n_cols matrix
+    stored in row-major order. After applying p, order is column-major.
+    new_pos = (i % n_cols)*n_rows + (i // n_cols)
+    """
+    p = [0] * (n_rows * n_cols)
+    for i in range(n_rows * n_cols):
+        r = i // n_cols
+        c = i %  n_cols
+        j = c * n_rows + r
+        p[i] = j
+    return p
+
+def _apply_permutation(vals, perm):
+    out = [0.0] * len(vals)
+    for i, j in enumerate(perm):
+        out[j] = vals[i]
+    return out
+
+# ---------- main record logic ----------
+
 def process_record(rec):
-    """
-    Enforce raster scan:
-      - Sort all points by y (ascending) to stack rows bottom→top.
-      - Partition into consecutive blocks of PER_LINE to form rows.
-      - Sort each row by x (ascending) to ensure left→right.
-    Falls back or skips based on STRICT_GRID if count isn't a clean multiple of PER_LINE.
-    """
     number, sid, xs, ys, ws = (p.strip() for p in rec.split(";", 4))
     x = parse_arr(xs); y = parse_arr(ys); w = parse_arr(ws)
 
@@ -59,27 +136,44 @@ def process_record(rec):
 
     if n % PER_LINE != 0:
         if STRICT_GRID:
-            # Not a clean grid; skip this record
             return None
-        else:
-            # Fallback: stable sort by (y, x) and then wrap every PER_LINE
-            order = sorted(range(n), key=lambda i: (y[i], x[i]))
-    else:
-        rows = n // PER_LINE
-        # 1) sort globally by y then x to get bottom→top, and stable left bias
-        by_y = sorted(range(n), key=lambda i: (y[i], x[i]))
-        # 2) slice consecutive blocks of PER_LINE as rows
-        # 3) sort each row by x only (final left→right guarantee)
-        order = []
-        for r in range(rows):
-            block = by_y[r*PER_LINE:(r+1)*PER_LINE]
-            block_sorted = sorted(block, key=lambda i: x[i])
-            order.extend(block_sorted)
 
-    x = [x[i] for i in order]
-    y = [y[i] for i in order]
-    w = [w[i] for i in order]
+    n_rows = n // PER_LINE
+
+    # Decide Pattern A (rows) vs Pattern B (columns) from geometry
+    row_dev, row_groups = _row_groups_tightness(x, y, PER_LINE)
+    col_dev, col_groups = _col_groups_tightness(x, y, PER_LINE)
+
+    is_pattern_b = col_dev < row_dev  # columns are tighter → Pattern B
+
+    if not is_pattern_b:
+        # Pattern A: leave as-is (already row-major raster), but ensure per-row left→right
+        # Sort each detected row by x, and rows by their mean y (bottom→top)
+        if row_groups is None:
+            # conservative: fall back to simple y-then-x raster
+            idx = list(range(n))
+            idx.sort(key=lambda i: (y[i], x[i]))
+            order = idx
+        else:
+            # bottom→top by mean y
+            row_groups.sort(key=lambda g: sum(y[i] for i in g) / len(g))
+            order = []
+            for g in row_groups:
+                g.sort(key=lambda i: x[i])  # left→right within row
+                order.extend(g)
+        x = [x[i] for i in order]
+        y = [y[i] for i in order]
+        w = [w[i] for i in order]
+        return number, sid, x, y, w
+
+    # Pattern B: apply your mapping — transpose row-major -> column-major indices.
+    perm = _transpose_order(n_rows, PER_LINE)  # size n_rows * PER_LINE
+    x = _apply_permutation(x, perm)
+    y = _apply_permutation(y, perm)
+    w = _apply_permutation(w, perm)
     return number, sid, x, y, w
+
+# ---------- IO ----------
 
 def main():
     with open(INPUT_FILE, "r", encoding="utf-8") as f:

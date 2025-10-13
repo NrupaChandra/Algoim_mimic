@@ -159,7 +159,7 @@ if __name__ == "__main__":
     #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     dataset = MultiChunkDataset(
-        index_file=os.path.join(data_dir, r'preprocessed_chuncks_1MMonotonic_functions\index.txt'),
+        index_file=os.path.join(data_dir, r'preprocessed_chuncks_100kMonotonic_functions\index.txt'),
         base_dir=data_dir
     )
     
