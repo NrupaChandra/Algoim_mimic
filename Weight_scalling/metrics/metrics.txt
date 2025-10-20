@@ -1,0 +1,5 @@
+Total samples compared: 78
+Overall MAE: 2.660267e-02
+Overall MSE: 1.001541e-03
+Mean Relative Error: 6.3144%
+Median Relative Error: 1.3023%

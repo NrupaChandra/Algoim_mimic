@@ -38,7 +38,7 @@ def test_fn(x, y):
 # Data loading
 data_dir = r"C:\Git\Algoim_mimic\Pre_processing"
 dataset = MultiChunkDataset(
-    index_file=os.path.join(data_dir, 'preprocessed_chuncks_10kMonotonic_functions/index.txt'),
+    index_file=os.path.join(data_dir, 'preprocessed_chuncks_1kTestMonotonic_functions/index.txt'),
     base_dir=data_dir
 )
 dataloader = DataLoader(dataset, batch_size=1, shuffle=False)
