@@ -18,7 +18,7 @@ import utilities  # must provide utilities.compute_integration(x, y, w, f)
 # ============================================================
 device = torch.device('cpu')
 
-model_path    = r"C:\Git\Algoim_mimic\FNN\Model\fnn_model_weights_v6.pth"
+model_path    = r"C:\Git\Algoim_mimic\ML Models\Classic_FNN\Model\fnn_model_weights_v6.pth"
 output_folder = r"C:\Git\Algoim_mimic\Convergence study"
 os.makedirs(output_folder, exist_ok=True)
 
@@ -342,7 +342,7 @@ def plot_all_subcell_nodes_landscape(ref_levels, model, filename, normalize_powe
 def compute_error_polynomial():
     ref_area = reference_area_grid(res=2048)
 
-    ref_levels = [1, 2, 4]
+    ref_levels = [1, 2, 4, 8 ,16, 32, 64 ,128]
     error_list, area_list = [], []
 
     print("\nPolynomial φ convergence via h-refinement (ML on partial cells only):")

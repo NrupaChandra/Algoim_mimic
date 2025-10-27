@@ -1,24 +1,20 @@
-#!/usr/bin/env python
 import os
 import uuid
 from math import comb
 import numpy as np
 
-# ===============================
-# 0) Config & output
-# ===============================
 output_folder = r"C:\Git\Algoim_mimic\Convergence study\Algoim_convergence"
 os.makedirs(output_folder, exist_ok=True)
-out_path_polys   = os.path.join(output_folder, "cut_subcell_polynomials.txt")
+out_path_polys   = os.path.join(output_folder, "cut_subcell_polynomials_p1_data.txt")
 out_path_summary = os.path.join(output_folder, "subcell_classification_summary.txt")
 
-# ===============================
-# 1) Level-set polynomial 
-# ===============================
-POLY_LINE = "0a96c8d6dc0ed2d3d4032f3df7e72eef;0,1,0,1;0,0,1,1;-0.11769,-0.018251,-0.56895,0.0072423"
+poly_line = "0a96c8d6dc0ed2d3d4032f3df7e72eef;0,1,0,1;0,0,1,1;-0.11769,-0.018251,-0.56895,0.0072423"
 
-def _parse_csv_int(s):   return np.array([int(v) for v in s.split(',') if v.strip()!=''], dtype=int)
-def _parse_csv_float(s): return np.array([float(v) for v in s.split(',') if v.strip()!=''], dtype=np.float64)
+def _parse_csv_int(s):   
+    return np.array([int(v) for v in s.split(',') if v.strip()!=''], dtype=int)
+
+def _parse_csv_float(s):
+    return np.array([float(v) for v in s.split(',') if v.strip()!=''], dtype=np.float64)
 
 def parse_poly_line(line: str):
     parts = [p.strip() for p in line.split(';')]
@@ -31,11 +27,8 @@ def parse_poly_line(line: str):
         raise ValueError("exps_x, exps_y, coeffs must have equal length")
     return exps_x, exps_y, coeffs
 
-EXPS_X, EXPS_Y, COEFFS = parse_poly_line(POLY_LINE)
+EXPS_X, EXPS_Y, COEFFS = parse_poly_line(poly_line)
 
-# ===============================
-# 2) Helpers
-# ===============================
 def phi_eval(x, y, exps_x=EXPS_X, exps_y=EXPS_Y, coeffs=COEFFS):
     val = 0.0
     X = np.asarray(x); Y = np.asarray(y)
@@ -44,12 +37,6 @@ def phi_eval(x, y, exps_x=EXPS_X, exps_y=EXPS_Y, coeffs=COEFFS):
     return val
 
 def classify_cell(ox, oy, h):
-    """
-    Strict sign-based classification:
-      - 'inside'  if all four corners < 0
-      - 'outside' if all four corners > 0 AND five probes > 0
-      - else 'partial'
-    """
     corners = [
         (ox - h, oy - h), (ox - h, oy + h),
         (ox + h, oy - h), (ox + h, oy + h)
@@ -93,14 +80,10 @@ def list_to_csv(vals, fmt="{:.17g}"):
     return ",".join(fmt.format(v) for v in vals)
 
 def random_hex_id():
-    """Generate a random 32-character hex string."""
     return uuid.uuid4().hex[:32]
 
-# ===============================
-# 3) Main extraction logic
-# ===============================
 def cut_subcell_polynomials():
-    levels = [2, 4, 8]
+    levels = [1, 2, 4, 8]
     poly_lines = []
     summary_lines = []
     count = 0
@@ -117,7 +100,6 @@ def cut_subcell_polynomials():
                 cell_id = random_hex_id()
                 status = classify_cell(ox, oy, h)
 
-                # record subcell classification with numbering and random ID
                 summary_lines.append(f"{n};{subno};{cell_id};{status}")
 
                 if status == 'inside':
@@ -133,7 +115,7 @@ def cut_subcell_polynomials():
                     exp_x_csv = list_to_csv(k_list)
                     exp_y_csv = list_to_csv(l_list)
                     coeff_csv = list_to_csv(coeff_list)
-                    # polynomial output uses same random ID
+
                     poly_lines.append(f"{count};{cell_id};{exp_x_csv};{exp_y_csv};{coeff_csv}")
 
         summary_lines.append(f"{n};counts;inside={inside_cnt};outside={outside_cnt};partial={partial_cnt}")

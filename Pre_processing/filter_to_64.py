@@ -1,8 +1,8 @@
 import pandas as pd
 from pathlib import Path
 
-output_path = Path(r"C:\Git\Algoim_mimic\Pre_processing\1MTestBernstein_p1_output_8.txt")
-input_path  = Path(r"C:\Git\Algoim_mimic\Pre_processing\1MTestBernstein_p1_data.txt")
+output_path = Path(r"C:\Git\Algoim_mimic\Pre_processing\1kTestBernstein_p1_output_8.txt")
+input_path  = Path(r"C:\Git\Algoim_mimic\Pre_processing\1kTestBernstein_p1_data.txt")
 
 out_dir = Path(r"C:\Git\Algoim_mimic\Pre_processing")
 

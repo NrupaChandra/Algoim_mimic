@@ -7,8 +7,8 @@ monotone_tol  = 1e-9;
 time = false;
 export = false;
 k = 1;
-N = 1000000;
-filebase = '1MTestBernstein_';
+N = 1000;
+filebase = '1kTestBernstein_';
 
 T = BaseTransformers2D;
 
