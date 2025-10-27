@@ -4,116 +4,79 @@ import pandas as pd
 import numpy as np
 import torch
 
-def _parse_value(value):
-    """
-    Helper function to parse a comma-separated string into a NumPy array.
-    """
-    return np.array(list(map(float, value.split(','))), dtype=np.float32)
+def _parse_csv_floats(value: str) -> np.ndarray:
+    return np.array([float(v) for v in value.split(',') if v.strip() != ''], dtype=np.float32)
 
-def pad_fixed(arr, fixed_length=16):
+def preprocess_scales(
+    input_file: str,
+    scales_file: str,
+    save_dir: str = r'C:\Git\Algoim_mimic\Pre_processing\10kpreprocessed_chunks_weight_scaled',
+    chunksize: int = 50000,
+    compute_2d_scales: bool = True
+):
     """
-    Pads or truncates a 1D NumPy array to a fixed length.
-    
-    Parameters:
-      - arr: Input 1D NumPy array.
-      - fixed_length: The desired fixed length.
-    
-    Returns:
-      A 1D NumPy array of length fixed_length.
-    """
-    current_length = len(arr)
-    if current_length < fixed_length:
-        pad_width = fixed_length - current_length
-        return np.pad(arr, (0, pad_width), mode='constant', constant_values=0)
-    else:
-        return arr[:fixed_length]
+    Reads input (exp_x, exp_y, coeff) and output (xscales, yscales) files in chunks,
+    converts each row to torch tensors, and saves per-chunk .pt files.
 
-def chain_csv(files, **kwargs):
+    Saved sample tuple per row:
+      (exp_x, exp_y, coeff, xscales, yscales, scales2d_or_None, sample_id)
     """
-    Generator that chains together chunks from multiple CSV files.
-    
-    Parameters:
-      - files: A list of file paths.
-      - kwargs: Additional keyword arguments to pass to pd.read_csv.
-    Yields:
-      Chunks (DataFrames) from each file in sequence.
-    """
-    for file in files:
-        print(f"Reading from {file}...")
-        for chunk in pd.read_csv(file, **kwargs):
-            yield chunk
+    os.makedirs(save_dir, exist_ok=True)
 
-def preprocess_data(data_files, output_files, save_dir='combined_preprocessed_chunks_10kBernstein', chunksize=50000):
-    """
-    Combines multiple data and output files, processes them in chunks, and saves the preprocessed data.
-    
-    Parameters:
-      - data_files: List of paths to the raw input (data) files.
-      - output_files: List of paths to the raw output files.
-      - save_dir: Directory where the processed chunk files will be saved.
-      - chunksize: Number of rows to process per chunk.
-    """
-    if not os.path.exists(save_dir):
-        os.makedirs(save_dir)
-    
-    # Create generators to yield chunks from the combined files.
-    data_reader = chain_csv(data_files, sep=';', chunksize=chunksize)
-    output_reader = chain_csv(output_files, sep=';', chunksize=chunksize)
-    
+    input_reader  = pd.read_csv(input_file,  sep=';', chunksize=chunksize)
+    scales_reader = pd.read_csv(scales_file, sep=';', chunksize=chunksize)
+
     chunk_idx = 0
     chunk_files = []
-    
-    # Process the combined chunks
-    for data_chunk, output_chunk in zip(data_reader, output_reader):
+
+    for in_chunk, sc_chunk in zip(input_reader, scales_reader):
+        # Optional sanity check that IDs align (cheap & defensive)
+        if not in_chunk['id'].equals(sc_chunk['id']):
+            # If files are guaranteed aligned and same order, you can drop this.
+            # Otherwise, join on 'id' to be safe:
+            in_chunk  = in_chunk.set_index('id')
+            sc_chunk  = sc_chunk.set_index('id')
+            merged = in_chunk.join(sc_chunk, how='inner', lsuffix='_in', rsuffix='_sc').reset_index()
+        else:
+            merged = pd.concat([in_chunk.reset_index(drop=True), 
+                                sc_chunk[['xscales','yscales']].reset_index(drop=True)], axis=1)
+
         data_list = []
-        for idx in range(len(data_chunk)):
-            # Parse and ensure fixed size for exp_x, exp_y, and coeff
-            exp_x   = pad_fixed(_parse_value(data_chunk.iloc[idx]['exp_x']), fixed_length=16)
-            exp_y   = pad_fixed(_parse_value(data_chunk.iloc[idx]['exp_y']), fixed_length=16)
-            coeff   = pad_fixed(_parse_value(data_chunk.iloc[idx]['coeff']), fixed_length=16)
-            
-            nodes_x = _parse_value(output_chunk.iloc[idx]['nodes_x'])
-            nodes_y = _parse_value(output_chunk.iloc[idx]['nodes_y'])
-            weights = _parse_value(output_chunk.iloc[idx]['weights'])
-            sample_id = data_chunk.iloc[idx]['id']
-            
-            # Convert the numpy arrays to torch tensors.
-            sample = (
-                torch.tensor(exp_x, dtype=torch.float32),
-                torch.tensor(exp_y, dtype=torch.float32),
-                torch.tensor(coeff, dtype=torch.float32),
-                torch.tensor(nodes_x, dtype=torch.float32),
-                torch.tensor(nodes_y, dtype=torch.float32),
-                torch.tensor(weights, dtype=torch.float32),
-                sample_id  # Keeping the ID as is
-            )
-            data_list.append(sample)
-        
-        # Save the processed chunk to a file.
-        chunk_file = os.path.join(save_dir, f'preprocessed_chunk{chunk_idx}.pt')
-        torch.save(data_list, chunk_file)
-        chunk_files.append(chunk_file)
-        print(f"Saved chunk {chunk_idx} with {len(data_list)} samples to {chunk_file}")
+        for _, row in merged.iterrows():
+            exp_x   = torch.tensor(_parse_csv_floats(row['exp_x']), dtype=torch.float32)
+            exp_y   = torch.tensor(_parse_csv_floats(row['exp_y']), dtype=torch.float32)
+            coeff   = torch.tensor(_parse_csv_floats(row['coeff']), dtype=torch.float32)
+
+            xscales = torch.tensor(_parse_csv_floats(row['xscales']), dtype=torch.float32)  # shape (8,)
+            yscales = torch.tensor(_parse_csv_floats(row['yscales']), dtype=torch.float32)  # shape (8,)
+
+            if compute_2d_scales:
+                # Outer product → (8,8) → flatten to (64,) for compact storage
+                scales2d = torch.tensor(
+                    np.outer(xscales.numpy(), yscales.numpy()).astype(np.float32).ravel(),
+                    dtype=torch.float32
+                )
+            else:
+                scales2d = None
+
+            sample_id = row['id']
+
+            data_list.append((exp_x, exp_y, coeff, xscales, yscales, scales2d, sample_id))
+
+        chunk_path = os.path.join(save_dir, f'preprocessed_chunk{chunk_idx}.pt')
+        torch.save(data_list, chunk_path)
+        chunk_files.append(chunk_path)
+        print(f"Saved chunk {chunk_idx} with {len(data_list)} samples to {chunk_path}")
         chunk_idx += 1
-    
-    # Create an index file listing all chunk files.
-    index_file = os.path.join(save_dir, 'index.txt')
-    with open(index_file, 'w') as f:
-        for cf in chunk_files:
-            f.write(cf + "\n")
-    print(f"Index file saved to {index_file}")
+
+    # Write an index of chunk files
+    index_path = os.path.join(save_dir, 'index.txt')
+    with open(index_path, 'w') as f:
+        for p in chunk_files:
+            f.write(p + '\n')
+    print(f"Index file saved to {index_path}")
 
 if __name__ == "__main__":
-    # Lists of data and output files to be combined.
-    data_files = [
-        "10kBernstein_p1_data.txt", 
-        "10kBernstein_p2_data.txt", 
-        "10kBernstein_p3_data.txt"
-    ]
-    output_files = [
-        "10kBernstein_p1_output_8.txt", 
-        "10kBernstein_p2_output_8.txt", 
-        "10kBernstein_p3_output_8.txt"
-    ]
-    
-    preprocess_data(data_files, output_files)
+    input_file  = r'C:\Git\Algoim_mimic\Pre_processing\10kTestBernstein_p1_data.txt'
+    scales_file = r'C:\Git\Algoim_mimic\Pre_processing\10kTestBernstein_p1_Weight_scalled.txt'
+    preprocess_scales(input_file, scales_file, compute_2d_scales=True)

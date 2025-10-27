@@ -10,7 +10,7 @@ def _parse_value(value):
     """
     return np.array(list(map(float, value.split(','))), dtype=np.float32)
 
-def preprocess_data(input_file, output_file, save_dir=r'C:\Git\Algoim_mimic\Pre_processing\preprocessed_chuncks_1MMonotonic_functions', chunksize=50000):
+def preprocess_data(input_file, output_file, save_dir=r'C:\Git\Algoim_mimic\Pre_processing\preprocessed_chuncks_1kTestMonotonic_functions', chunksize=50000):
     """
     Reads the raw input and output text files in chunks, preprocesses each sample,
     and saves the preprocessed data for each chunk into separate binary files.
@@ -73,6 +73,6 @@ def preprocess_data(input_file, output_file, save_dir=r'C:\Git\Algoim_mimic\Pre_
 
 if __name__ == "__main__":
     # Replace these with the paths to your input and output text files.
-    input_file  = r'C:\Git\Algoim_mimic\Pre_processing\1MTestBernstein_p1_data_filtered64.txt'
-    output_file = r'C:\Git\Algoim_mimic\Pre_processing\1MTestBernstein_p1_output_8_filtered64.txt'
+    input_file  = r'C:\Git\Algoim_mimic\Pre_processing\1kTestBernstein_p1_data_filtered64.txt'
+    output_file = r'C:\Git\Algoim_mimic\Pre_processing\1kTestBernstein_p1_output_8_filtered64.txt'
     preprocess_data(input_file, output_file)
