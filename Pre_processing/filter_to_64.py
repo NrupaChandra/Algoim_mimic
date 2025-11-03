@@ -1,10 +1,10 @@
 import pandas as pd
 from pathlib import Path
 
-output_path = Path(r"C:\Git\Algoim_mimic\Pre_processing\1kTestBernstein_p1_output_8.txt")
-input_path  = Path(r"C:\Git\Algoim_mimic\Pre_processing\1kTestBernstein_p1_data.txt")
+output_path = Path(r"C:\Git\Algoim_mimic\Pre_processing\text_data\100kTestBernstein_p1_output_8.txt")
+input_path  = Path(r"C:\Git\Algoim_mimic\Pre_processing\text_data\100kTestBernstein_p1_data.txt")
 
-out_dir = Path(r"C:\Git\Algoim_mimic\Pre_processing")
+out_dir = Path(r"C:\Git\Algoim_mimic\Pre_processing\text_data")
 
 df_out = pd.read_csv(output_path, sep=';', dtype=str)
 df_in  = pd.read_csv(input_path,  sep=';', dtype=str)

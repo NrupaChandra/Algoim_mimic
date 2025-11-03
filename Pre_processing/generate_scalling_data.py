@@ -1,8 +1,8 @@
 import numpy as np
 
 
-file_path = r"C:\Git\Algoim_mimic\Pre_processing\1kTestBernstein_p1_output_8_filtered64.txt"
-output_file = r"C:\Git\Algoim_mimic\Pre_processing\1kTestBernstein_p1_Weight_scalled.txt"
+file_path = r"C:\Git\Algoim_mimic\Pre_processing\text_data\100kTestBernstein_p1_output_8_filtered64_sorted.txt"
+output_file = r"C:\Git\Algoim_mimic\Pre_processing\text_data\100kTestBernstein_p1_Weight_scalled.txt"
 
 #weightRefs = np.array([0.1012285362903763 ,0.2223810344533745 ,0.3137066458778873 ,0.3626837833783620 ,0.3626837833783620 ,0.3137066458778873 ,0.2223810344533745, 0.1012285362903763])
 deltaRef = 0.9602898564975363*2 #always same since it comes from fixed quadrature 
