@@ -10,8 +10,8 @@ class NodalPreprocessor(nn.Module):
         self.grid_size = int(np.sqrt(num_nodes))
         if self.grid_size ** 2 != num_nodes:
             raise ValueError("num_nodes must be a perfect square (e.g., 4, 9, 16, ...)")
-        xs = torch.linspace(domain[0], domain[1], self.grid_size, dtype=torch.float32)
-        ys = torch.linspace(domain[0], domain[1], self.grid_size, dtype=torch.float32)
+        xs = torch.linspace(domain[0], domain[1], self.grid_size, dtype=torch.float64)
+        ys = torch.linspace(domain[0], domain[1], self.grid_size, dtype=torch.float64)
         X, Y = torch.meshgrid(xs, ys, indexing='ij')
         self.register_buffer("X", X.flatten())
         self.register_buffer("Y", Y.flatten())
@@ -47,14 +47,14 @@ class FeedforwardNN(nn.Module):
             nn.Linear(256, 128),
             nn.ReLU(),
             nn.Linear(128, 8),
-            nn.ReLU()
+            nn.Sigmoid()
         )
 
         self.scale_y_head = nn.Sequential(
             nn.Linear(256, 128),
             nn.ReLU(),
             nn.Linear(128, 8),
-            nn.ReLU()
+            nn.Sigmoid()
         )
 
     def forward(self, exp_x, exp_y, coeff):
@@ -93,67 +93,24 @@ def load_checkpoint(model, optimizer, filename="checkpoint.pth"):
     return epoch, loss
 
 
+'''
+model = FeedforwardNN(num_nodes=64, domain=(-1, 1))
+B, m = 2, 4  # two samples, four terms each
 
-'''class FeedForwardNN(nn.Module):
-    def __init__(self, hidden_dim, output_dim, max_output_len,
-                 num_nodes=64, domain=(-1,1),
-                 dropout_rate=0.0, num_shared_layers=1):
-        super(FeedForwardNN, self).__init__()
-        self.nodal_preprocessor = NodalPreprocessor(num_nodes=num_nodes, domain=domain)
-        input_dim = num_nodes
-
-        shared_layers = []
-        in_dim = input_dim
-        for _ in range(num_shared_layers):
-            shared_layers.append(nn.Linear(in_dim, hidden_dim))
-            shared_layers.append(nn.ReLU())
-            if dropout_rate > 0:
-                shared_layers.append(nn.Dropout(dropout_rate))
-            in_dim = hidden_dim
-        self.shared_layer = nn.Sequential(*shared_layers)
-
-        # two heads: 8 scale factors for x, 8 for y
-        self.scale_x_head = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 8),
-            nn.Softplus()  # ≥0 scales; switch to Tanh if you want signed factors
-        )
-        self.scale_y_head = nn.Sequential(
-            nn.Linear(hidden_dim, hidden_dim),
-            nn.ReLU(),
-            nn.Linear(hidden_dim, 8),
-            nn.Softplus()
-        )
-
-    def forward(self, exp_x, exp_y, coeff):
-        x = self.nodal_preprocessor(exp_x, exp_y, coeff)
-        shared = self.shared_layer(x)
-        scales_x = self.scale_x_head(shared)  # (B, 8)
-        scales_y = self.scale_y_head(shared)  # (B, 8)
-        return scales_x, scales_y
+exp_x = torch.tensor([[0., 1., 0., 1.],
+                      [1., 2., 1., 0.]], dtype=torch.float64)
+exp_y = torch.tensor([[0., 0., 1., 1.],
+                      [1., 0., 2., 1.]], dtype=torch.float64)
+coeff = torch.tensor([[1.0, -0.5, 0.3, 0.2],
+                      [0.8, 0.1, -0.4, 0.5]], dtype=torch.float64)
 
 
-def load_ff_pipelines_model(weights_path=None,
-                            hidden_dim=256,
-                            output_dim=256,
-                            max_output_len=64,
-                            num_nodes=64,
-                            domain=(-1,1),
-                            dropout_rate=0.07,
-                            num_shared_layers=1,
-                            map_location=torch.device('cpu')):
-    model = FeedForwardNN(hidden_dim,
-                          output_dim,
-                          max_output_len,
-                          num_nodes,
-                          domain,
-                          dropout_rate,
-                          num_shared_layers).float()
-    if weights_path:
-        state_dict = torch.load(weights_path, map_location=map_location)
-        model.load_state_dict(state_dict)
-    return model'''
+scales_x, scales_y = model(exp_x, exp_y, coeff)
 
+print("scales_x shape:", scales_x.shape)
+print("scales_y shape:", scales_y.shape)
 
+print("\nscales_x sample:\n", scales_x)
+print("\nscales_y sample:\n", scales_y)
 
+'''

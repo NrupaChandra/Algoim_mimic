@@ -6,73 +6,42 @@ import torch.nn as nn
 import torch.optim as optim
 from torch.utils.data import DataLoader, random_split
 from multidataloader_fnn import MultiChunkDataset 
-from model_fnn import load_ff_pipelines_model, save_checkpoint, load_checkpoint
+from model_scalling_fnn import load_ff_pipelines_model, save_checkpoint, load_checkpoint
 import os
 import numpy as np
 import matplotlib.pyplot as plt
 import torch.nn.functional as F
 
 # Set default dtype to single precision.
-torch.set_default_dtype(torch.float32)
+torch.set_default_dtype(torch.float64)
 
 # Device setup
 device = torch.device('cpu')
-'''device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-print(f"\nUsing device: {device}, GPU Name: {torch.cuda.get_device_name(0)}")'''
 
 # Define paths for data and saving model/checkpoints.
 data_dir = r"C:\Git\Algoim_mimic\Pre_processing"
-model_dir = r"C:\Git\Algoim_mimic\FNN\Model"
+model_dir = r"C:\Git\Algoim_mimic\ML Models\Scalling_FNN\Model"
 os.makedirs(model_dir, exist_ok=True)
 
 
-#  Loss 
+#  Loss
 
-def legendre_poly(n, x):
-    if n == 0:
-        return torch.ones_like(x)
-    elif n == 1:
-        return x
-    else:
-        P_nm2 = torch.ones_like(x)
-        P_nm1 = x
-        for k in range(1, n):
-            P_n = ((2 * k + 1) * x * P_nm1 - k * P_nm2) / (k + 1)
-            P_nm2, P_nm1 = P_nm1, P_n
-        return P_n
+def loss_function(Ts_x, Ts_y, Ps_x, Ps_y, reduction="mean"):
 
-def test_functions():
-    funcs = []
-    for i in range(3):
-        for j in range(3):
-            funcs.append(lambda x, y, i=i, j=j: legendre_poly(i, x) * legendre_poly(j, y))
-    return funcs
+    B = Ts_x.size(0)
+    Loss_scales_x = torch.zeros(B, 8, device=Ts_x.device)
+    Loss_scales_y = torch.zeros(B, 8, device=Ts_y.device)
 
-def loss_function(exp_x, exp_y, coeff, pred_nodes_x, pred_nodes_y, pred_weights, 
-                                 true_nodes_x, true_nodes_y, true_weights, masks, 
-                                 criterion, test_functions):
-    integration_loss = 0
-    dx = pred_nodes_x - true_nodes_x       
-    dy = pred_nodes_y - true_nodes_y
-    dist = dx.pow(2) + dy.pow(2)
-    node_loss = torch.sqrt(dist + 1e-12).mean()  
+    for i in range(8):
+        Loss_scales_x[:, i] = torch.abs(Ts_x[:, i] - Ps_x[:, i])
+        Loss_scales_y[:, i] = torch.abs(Ts_y[:, i] - Ps_y[:, i])
 
-    w_diff = pred_weights - true_weights       
-    w_err = w_diff.pow(2)                 
-    weight_loss = torch.sqrt(w_err +1e-12).mean()
-    
-
-    for test_fn in test_functions():
-        pred_integral = torch.sum(pred_weights * test_fn(pred_nodes_x, pred_nodes_y), dim=1)
-        true_integral = torch.sum(true_weights * test_fn(true_nodes_x, true_nodes_y), dim=1)
-        integration_loss += criterion(pred_integral, true_integral)
-    integration_loss /= len(test_functions())
-    total_loss =  weight_loss + node_loss
-    return total_loss
+    per_sample = (Loss_scales_x.sum(dim=1) + Loss_scales_y.sum(dim=1))  
+    return per_sample.mean() if reduction == "mean" else per_sample.sum()  
 
 # Training Function
 
-def train_fnn(model, train_dataloader, val_dataloader, optimizer, criterion, test_functions, epochs=1000, checkpoint_path=None, save_every=5):
+def train_fnn(model, train_dataloader, val_dataloader, optimizer, epochs=1000, checkpoint_path=None, save_every=5):
     if checkpoint_path is None:
         checkpoint_path = os.path.join(model_dir, "fnn_checkpoint.pth")
     model.to(device)
@@ -101,15 +70,14 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, criterion, tes
         # Training
         model.train()
         train_loss = 0
-        for exp_x, exp_y, coeff, true_nodes_x, true_nodes_y, true_weights, masks in train_dataloader:
-            exp_x, exp_y, coeff, true_nodes_x, true_nodes_y = (
-                x.to(device) for x in (exp_x, exp_y, coeff, true_nodes_x, true_nodes_y)
+        for exp_x, exp_y, coeff, true_scales_x, true_scales_y, masks, sample_ids in train_dataloader:
+            exp_x, exp_y, coeff, true_scales_x, true_scales_y = (
+                x.to(device) for x in (exp_x, exp_y, coeff, true_scales_x, true_scales_y)
             )
             optimizer.zero_grad()
-            pred_nodes_x, pred_nodes_y, pred_weights = model(exp_x, exp_y, coeff)
+            pred_scales_x , pred_scales_y = model(exp_x, exp_y, coeff)
 
-            loss = loss_function(exp_x, exp_y, coeff, pred_nodes_x, pred_nodes_y, pred_weights, true_nodes_x, true_nodes_y, true_weights, masks, 
-                                 criterion, test_functions)
+            loss = loss_function(true_scales_x, true_scales_y, pred_scales_x, pred_scales_y)
             loss.backward()
             torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
             optimizer.step()
@@ -122,13 +90,12 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, criterion, tes
         model.eval()
         val_loss = 0
         with torch.no_grad():
-            for exp_x, exp_y, coeff, true_nodes_x, true_nodes_y, true_weights, masks in val_dataloader:
-                exp_x, exp_y, coeff, true_nodes_x, true_nodes_y = (
-                    x.to(device) for x in (exp_x, exp_y, coeff, true_nodes_x, true_nodes_y)
+            for exp_x, exp_y, coeff, true_scales_x, true_scales_y, masks, sample_ids in val_dataloader:
+                exp_x, exp_y, coeff, true_scales_x, true_scales_y = (
+                    x.to(device) for x in (exp_x, exp_y, coeff,  true_scales_x, true_scales_y)
                 )
-                pred_nodes_x, pred_nodes_y, pred_weights = model(exp_x, exp_y, coeff)
-                loss = loss_function(exp_x, exp_y, coeff, pred_nodes_x, pred_nodes_y, pred_weights, true_nodes_x, true_nodes_y, true_weights, masks, 
-                                 criterion, test_functions)
+                pred_scales_x , pred_scales_y = model(exp_x, exp_y, coeff)
+                loss = loss_function(true_scales_x, true_scales_y, pred_scales_x, pred_scales_y)
                 val_loss += loss.item()
         val_loss /= len(val_dataloader)
         val_losses.append(val_loss)
@@ -151,7 +118,7 @@ def train_fnn(model, train_dataloader, val_dataloader, optimizer, criterion, tes
 # Main function
 
 if __name__ == "__main__":
-    seed = 6432
+    seed = 6464
     torch.manual_seed(seed)
     random.seed(seed)
     num_workers = 0
@@ -159,7 +126,7 @@ if __name__ == "__main__":
     #device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
     dataset = MultiChunkDataset(
-        index_file=os.path.join(data_dir, r'preprocessed_chuncks_100kMonotonic_functions\index.txt'),
+        index_file=os.path.join(data_dir, r'100kpreprocessed_chunks_weight_scaled\index.txt'),
         base_dir=data_dir
     )
     
@@ -190,13 +157,12 @@ if __name__ == "__main__":
     model = load_ff_pipelines_model()
     model.to(device)
     
-    criterion = nn.MSELoss()
     optimizer = optim.AdamW(model.parameters(), lr=0.001, weight_decay=1.0e-05)
     
     epochs = 1000
     epoch_list, train_losses, val_losses, epoch_times = train_fnn(
         model, train_dataloader, val_dataloader,
-        optimizer,criterion, test_functions, epochs=epochs, checkpoint_path=os.path.join(model_dir, "fnn_checkpoint.pth"), save_every=5
+        optimizer, epochs=epochs, checkpoint_path=os.path.join(model_dir, "fnn_checkpoint.pth"), save_every=5
     )
     
     plt.figure(figsize=(10,5))
