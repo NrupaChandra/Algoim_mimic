@@ -73,7 +73,7 @@ def load_ml_weights_map():
     exp_y_all = []
     coeffs_all = []
 
-    # -------- Read polynomial data --------
+    # Read polynomial data 
     with open(data_path, "r", encoding="utf-8") as f:
         for line in f:
             line = line.strip()
@@ -97,7 +97,7 @@ def load_ml_weights_map():
 
     print(f"Total records in data file: {len(ids)}")
 
-    weights_map = {}  # id_str -> Decimal(sum_of_scaled_weights)
+    weights_map = {}  # id_str 
 
     with torch.no_grad():
         for i, id_str in enumerate(ids):
@@ -241,7 +241,7 @@ def main():
                 area = weights_map[id_str] / nn
 
         else:
-            # unknown status (should not happen), ignore for safety
+            print(f"missing data")
             continue
 
         rows_out.append((n, subno, id_str, status_l, area))
