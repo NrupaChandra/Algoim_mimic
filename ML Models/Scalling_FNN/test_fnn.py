@@ -5,9 +5,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 from model_scalling_fnn import load_ff_pipelines_model
 
-device = torch.device("cpu")  # or "cuda" if available
+device = torch.device("cpu")
 
-# ------------------ Paths ------------------
 data_dir = r"C:\Git\Algoim_mimic\Pre_processing\1kpreprocessed_chunks_weight_scaled"
 chunk_path = os.path.join(data_dir, "preprocessed_chunk0.pt")
 
@@ -15,7 +14,6 @@ model_dir = r"C:\Git\Algoim_mimic\ML Models\Scalling_FNN\Model"
 weights_path = os.path.join(model_dir, "fnn_model_weights_v6.pth")
 output_path = os.path.join(model_dir, "predicted_scales.txt")
 
-# ------------------ Model ------------------
 model = load_ff_pipelines_model()
 model.load_state_dict(torch.load(weights_path, map_location=device))
 model.to(device)
@@ -25,12 +23,12 @@ print(f"Loading test chunk from: {chunk_path}")
 chunk_data = torch.load(chunk_path, map_location=device)
 print(f"Loaded {len(chunk_data)} samples.")
 
-# ------------------ Lists to collect data ------------------
+
 mae_x_list, mae_y_list = [], []
 true_x_all, pred_x_all = [], []
 true_y_all, pred_y_all = [], []
 
-# ------------------ Inference ------------------
+
 with torch.no_grad(), open(output_path, "w") as f:
     f.write("number;id;pred_scale_x;pred_scale_y\n")
 
@@ -64,7 +62,6 @@ with torch.no_grad(), open(output_path, "w") as f:
         pred_y_str = ",".join(f"{v:.16f}" for v in pred_y)
         f.write(f"{idx};{sample_id};{pred_x_str};{pred_y_str}\n")
 
-# ------------------ Compute overall stats ------------------
 overall_mae_x = np.mean(mae_x_list)
 overall_mae_y = np.mean(mae_y_list)
 
@@ -73,15 +70,14 @@ print(f"MAE_x: {overall_mae_x:.8e}")
 print(f"MAE_y: {overall_mae_y:.8e}")
 print(f"Predictions saved to: {output_path}")
 
-# ------------------ Prepare flattened arrays ------------------
+
 true_x_all = np.concatenate(true_x_all)
 pred_x_all = np.concatenate(pred_x_all)
 true_y_all = np.concatenate(true_y_all)
 pred_y_all = np.concatenate(pred_y_all)
 
-# ------------------ PLOTS ------------------
 
-threshold = 0.05  # tweak if needed
+threshold = 0.05  
 filtered_x = [m for m in mae_x_list if m <= threshold]
 filtered_y = [m for m in mae_y_list if m <= threshold]
 
@@ -91,8 +87,6 @@ filtered_mae_y = np.mean(filtered_y)
 print("\n=== Filtered Mean Absolute Error (MAE, ignoring outliers) ===")
 print(f"MAE_x (filtered): {filtered_mae_x:.8e}")
 print(f"MAE_y (filtered): {filtered_mae_y:.8e}")
-
-# ---------- side-by-side histograms ----------
 fig, axes = plt.subplots(1, 2, figsize=(10, 4), sharey=True)
 
 # MAE_x
