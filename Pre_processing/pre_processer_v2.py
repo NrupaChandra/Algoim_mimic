@@ -10,7 +10,7 @@ def _parse_csv_floats(value: str) -> np.ndarray:
 def preprocess_scales(
     input_file: str,
     scales_file: str,
-    save_dir: str = r'C:\Git\Algoim_mimic\Pre_processing\100kpreprocessed_chunks_weight_scaled',
+    save_dir: str = r'C:\Git\Algoim_mimic\Pre_processing\1kpreprocessed_chunks_weight_scaled',
     chunksize: int = 50000,
     compute_2d_scales: bool = True
 ):
@@ -77,6 +77,6 @@ def preprocess_scales(
     print(f"Index file saved to {index_path}")
 
 if __name__ == "__main__":
-    input_file  = r'C:\Git\Algoim_mimic\Pre_processing\text_data\100kTestBernstein_p1_data_filtered64.txt'
-    scales_file = r'C:\Git\Algoim_mimic\Pre_processing\text_data\100kTestBernstein_p1_Weight_scalled.txt'
+    input_file  = r'C:\Git\Algoim_mimic\Pre_processing\text_data\1kTestBernstein_p1_data_filtered64.txt'
+    scales_file = r'C:\Git\Algoim_mimic\Pre_processing\text_data\1kTestBernstein_p1_Weight_scalled.txt'
     preprocess_scales(input_file, scales_file, compute_2d_scales=True)

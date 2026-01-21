@@ -1,8 +1,8 @@
 # sort_rows_or_transpose.py — keep row-major; transpose if column-major (no numpy/regex)
 # Output preserves the exact numeric formatting from input (no re-formatting).
 
-INPUT_FILE  = r"C:\Git\Algoim_mimic\Pre_processing\text_data\100kTestBernstein_p1_output_8_filtered64.txt"
-OUTPUT_FILE = r"C:\Git\Algoim_mimic\Pre_processing\text_data\100kTestBernstein_p1_output_8_filtered64_sorted.txt"
+INPUT_FILE  = r"C:\Git\Algoim_mimic\Pre_processing\text_data\1kTestBernstein_p1_output_8_filtered64.txt"
+OUTPUT_FILE = r"C:\Git\Algoim_mimic\Pre_processing\text_data\1kTestBernstein_p1_output_8_filtered64_sorted.txt"
 
 PER_LINE     = 8        # number of nodes per row (columns)
 STRICT_GRID  = True     # require n % PER_LINE == 0 else skip record

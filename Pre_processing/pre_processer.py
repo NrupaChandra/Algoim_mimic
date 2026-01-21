@@ -73,6 +73,6 @@ def preprocess_data(input_file, output_file, save_dir=r'C:\Git\Algoim_mimic\Pre_
 
 if __name__ == "__main__":
     # Replace these with the paths to your input and output text files.
-    input_file  = r'C:\Git\Algoim_mimic\Pre_processing\1kTestBernstein_p1_data_filtered64.txt'
-    output_file = r'C:\Git\Algoim_mimic\Pre_processing\1kTestBernstein_p1_output_8_filtered64.txt'
+    input_file  = r'C:\Git\Algoim_mimic\Pre_processing\text_data\1kTestBernstein_p1_data_filtered64.txt'
+    output_file = r'C:\Git\Algoim_mimic\Pre_processing\text_data\1kTestBernstein_p1_output_8_filtered64.txt'
     preprocess_data(input_file, output_file)
