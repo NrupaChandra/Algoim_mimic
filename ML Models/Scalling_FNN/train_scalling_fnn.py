@@ -25,7 +25,6 @@ os.makedirs(model_dir, exist_ok=True)
 
 
 #  Loss
-
 def loss_function(Ts_x, Ts_y, Ps_x, Ps_y, reduction="mean"):
 
     B = Ts_x.size(0)

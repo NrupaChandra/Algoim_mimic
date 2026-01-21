@@ -10,8 +10,8 @@ class NodalPreprocessor(nn.Module):
         self.grid_size = int(np.sqrt(num_nodes))
         if self.grid_size ** 2 != num_nodes:
             raise ValueError("num_nodes must be a perfect square (e.g., 4, 9, 16, ...)")
-        xs = torch.linspace(domain[0], domain[1], self.grid_size, dtype=torch.float64)
-        ys = torch.linspace(domain[0], domain[1], self.grid_size, dtype=torch.float64)
+        xs = torch.linspace(domain[0], domain[1], self.grid_size, dtype=torch.float32)
+        ys = torch.linspace(domain[0], domain[1], self.grid_size, dtype=torch.float32)
         X, Y = torch.meshgrid(xs, ys, indexing='ij')
         self.register_buffer("X", X.flatten())
         self.register_buffer("Y", Y.flatten())
@@ -31,7 +31,6 @@ class NodalPreprocessor(nn.Module):
         max_val = nodal.max(dim=1, keepdim=True)[0] + 1e-6
         return nodal / max_val
     
-
 
 class FeedforwardNN(nn.Module):
     def __init__(self, num_nodes=64, domain =(-1,1)):
@@ -98,11 +97,11 @@ model = FeedforwardNN(num_nodes=64, domain=(-1, 1))
 B, m = 2, 4  # two samples, four terms each
 
 exp_x = torch.tensor([[0., 1., 0., 1.],
-                      [1., 2., 1., 0.]], dtype=torch.float64)
+                      [1., 2., 1., 0.]], dtype=torch.float32)
 exp_y = torch.tensor([[0., 0., 1., 1.],
-                      [1., 0., 2., 1.]], dtype=torch.float64)
+                      [1., 0., 2., 1.]], dtype=torch.float32)
 coeff = torch.tensor([[1.0, -0.5, 0.3, 0.2],
-                      [0.8, 0.1, -0.4, 0.5]], dtype=torch.float64)
+                      [0.8, 0.1, -0.4, 0.5]], dtype=torch.float32)
 
 
 scales_x, scales_y = model(exp_x, exp_y, coeff)

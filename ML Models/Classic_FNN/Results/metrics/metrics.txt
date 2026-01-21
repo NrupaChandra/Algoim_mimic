@@ -1,0 +1,13 @@
+Overall MAE: 2.3697e-02
+Overall MSE: 8.2484e-04
+Mean Relative Error: 4.87%
+Median Relative Error: 1.34%
+Identified 8 outlier samples (relative error > 15.38%):
+Sample a17c9d2e4ea7cce7a03918940cb72d87: Relative Error = 22.88%
+Sample 1917fa1202fd8f18b45641f183544c2f: Relative Error = 17.50%
+Sample 9e71237cdf2f4382f6a710dd85355af3: Relative Error = 19.91%
+Sample b37cb180d2e68189e6fbde47a6798268: Relative Error = 26.92%
+Sample 4515cd68e1685a674cb064a9c0db25be: Relative Error = 16.97%
+Sample 731f86245b060eb2f33a6d1ab288df7c: Relative Error = 16.17%
+Sample 3eb646bd268db4de11afd95bf548ecaa: Relative Error = 29.03%
+Sample 02eb47b05052e2c3d4daca8647b7d68e: Relative Error = 21.24%

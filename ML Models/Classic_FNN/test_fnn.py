@@ -18,8 +18,8 @@ device = torch.device('cpu')
 torch.set_default_dtype(torch.float32)
 
 # Define directories for model and test results.
-model_dir = r"C:\Git\Algoim_mimic\FNN\Model"
-results_dir = r"C:\Git\Algoim_mimic\FNN\Results"
+model_dir = r"C:\Git\Algoim_mimic\ML Models\Classic_FNN\Model"
+results_dir = r"C:\Git\Algoim_mimic\ML Models\Classic_FNN\Results"
 os.makedirs(results_dir, exist_ok=True)
 
 # Redirect all print() output (and errors) to a log file
